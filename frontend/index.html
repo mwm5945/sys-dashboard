@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>System Dashboard</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+--bg-primary:#0f0f23;
+--bg-secondary:#1a1a2e;
+--bg-card:rgba(22,22,44,.85);
+--bg-card-hover:rgba(30,30,58,.95);
+--text-primary:#e0e0e0;
+--text-secondary:#a0a0b8;
+--text-muted:#6b6b80;
+--border-color:rgba(255,255,255,.06);
+--cpu-accent:#4fc3f7;
+--mem-accent:#81c784;
+--gpu-accent:#ffb74d;
+--net-accent:#e57373;
+--fan-accent:#b39ddb;
+--card-radius:14px;
+--card-shadow:0 8px 32px rgba(0,0,0,.35)
+}
+
+body{
+font-family:'Segoe UI',system-ui,-apple-system,sans-serif;
+background:var(--bg-primary);
+color:var(--text-primary);
+min-height:100vh;
+overflow-x:hidden
+}
+
+body::before{
+content:'';
+position:fixed;top:0;left:0;right:0;bottom:0;
+background:
+radial-gradient(ellipse at 20% 0%,rgba(79,195,247,.04) 0%,transparent 60%),
+radial-gradient(ellipse at 80% 100%,rgba(229,115,115,.04) 0%,transparent 60%);
+pointer-events:none;z-index:0
+}
+
+header{
+position:sticky;top:0;z-index:100;
+backdrop-filter:blur(16px);
+background:rgba(15,15,35,.8);
+border-bottom:1px solid var(--border-color);
+padding:1rem 2rem;
+display:flex;align-items:center;justify-content:space-between
+}
+
+.header-left{display:flex;align-items:center;gap:.75rem}
+.logo-icon{font-size:1.6rem}
+
+h1{
+font-size:1.35rem;font-weight:700;letter-spacing:-.02em;
+background:linear-gradient(135deg,#e0e0e0,#a0a0b8);
+-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text
+}
+
+.header-right{display:flex;align-items:center;gap:1.2rem}
+
+.clock{
+font-size:1.05rem;font-weight:500;color:var(--text-secondary);
+font-variant-numeric:tabular-nums
+}
+
+.status-dot{
+width:8px;height:8px;border-radius:50%;
+background:#4caf50;
+box-shadow:0 0 8px rgba(76,175,80,.6);
+animation:pulse 2s ease-in-out infinite
+}
+
+.status-dot.error{
+background:#f44336;
+box-shadow:0 0 8px rgba(244,67,54,.6)
+}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+
+.dashboard{position:relative;z-index:1;padding:1.5rem 2rem;max-width:1600px;margin:0 auto}
+
+.card-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
+gap:1.25rem;margin-bottom:2rem
+}
+
+.card{
+background:var(--bg-card);
+border:1px solid var(--border-color);
+border-radius:var(--card-radius);
+padding:1.5rem;
+box-shadow:var(--card-shadow);
+backdrop-filter:blur(8px);
+transition:transform .2s ease,box-shadow .2s ease,background .2s ease;
+position:relative;overflow:hidden
+}
+
+.card::before{
+content:'';position:absolute;top:0;left:0;right:0;
+height:3px;
+border-radius:var(--card-radius) var(--card-radius) 0 0
+}
+
+.card:hover{
+transform:translateY(-2px);
+box-shadow:0 12px 40px rgba(0,0,0,.5);
+background:var(--bg-card-hover)
+}
+
+.card.cpu::before{background:linear-gradient(90deg,var(--cpu-accent),transparent)}
+.card.memory::before{background:linear-gradient(90deg,var(--mem-accent),transparent)}
+.card.gpu::before{background:linear-gradient(90deg,var(--gpu-accent),transparent)}
+.card.network::before{background:linear-gradient(90deg,var(--net-accent),transparent)}
+.card.fans::before{background:linear-gradient(90deg,var(--fan-accent),transparent)}
+
+.card-header{display:flex;align-items:center;gap:.6rem;margin-bottom:1.25rem}
+
+.card-icon{
+font-size:1.3rem;width:40px;height:40px;
+display:flex;align-items:center;justify-content:center;
+border-radius:10px
+}
+
+.card.cpu .card-icon{background:rgba(79,195,247,.12)}
+.card.memory .card-icon{background:rgba(129,199,132,.12)}
+.card.gpu .card-icon{background:rgba(255,183,77,.12)}
+.card.network .card-icon{background:rgba(229,115,115,.12)}
+.card.fans .card-icon{background:rgba(179,157,219,.12)}
+
+.card-title{font-size:.85rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-secondary)}
+
+.value-row{display:flex;align-items:baseline;gap:.4rem;margin-bottom:1rem}
+.big-value{font-size:2.6rem;font-weight:800;line-height:1;transition:opacity .3s}
+.big-value.updating{opacity:.3}
+.unit{font-size:1.1rem;color:var(--text-muted);font-weight:500}
+
+.progress-container{margin-bottom:1rem}
+.progress-label{
+display:flex;justify-content:space-between;
+font-size:.75rem;color:var(--text-muted);margin-bottom:.35rem
+}
+.progress-track{height:8px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden}
+.progress-fill{
+height:100%;border-radius:4px;
+transition:width .6s cubic-bezier(.4,0,.2,1);position:relative
+}
+.progress-fill::after{
+content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+background:linear-gradient(90deg,transparent,rgba(255,255,255,.15),transparent);
+animation:shimmer 2s ease-in-out infinite
+}
+
+@keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+.card.cpu .progress-fill{background:linear-gradient(90deg,#0288d1,var(--cpu-accent))}
+.card.memory .progress-fill{background:linear-gradient(90deg,#388e3c,var(--mem-accent))}
+.card.gpu .progress-fill{background:linear-gradient(90deg,#f57c00,var(--gpu-accent))}
+.card.network .progress-fill{background:linear-gradient(90deg,#c62828,var(--net-accent))}
+.card.fans .progress-fill{background:linear-gradient(90deg,#7e57c2,var(--fan-accent))}
+
+.meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:.8rem}
+.meta-item{
+display:flex;justify-content:space-between;
+padding:.35rem .55rem;
+background:rgba(255,255,255,.02);border-radius:6px
+}
+.meta-label{color:var(--text-muted)}
+.meta-value{font-weight:600;color:var(--text-primary);font-variant-numeric:tabular-nums}
+
+.core-bars{display:flex;gap:3px;margin-bottom:.75rem;flex-wrap:wrap}
+.core-bar-container{flex:1;min-width:24px;text-align:center}
+.core-bar-track{
+height:45px;background:rgba(255,255,255,.04);
+border-radius:3px;overflow:hidden;
+display:flex;align-items:flex-end
+}
+.core-bar-fill{width:100%;border-radius:3px;transition:height .5s ease;min-height:1px}
+
+.swap-section{margin-top:.75rem;padding-top:.75rem;border-top:1px solid rgba(255,255,255,.04)}
+
+.fan-item{display:flex;justify-content:space-between;align-items:center;padding:.4rem .6rem;margin-bottom:.3rem;background:rgba(255,255,255,.02);border-radius:6px;font-size:.85rem}
+.fan-name{color:var(--text-muted)}
+.fan-rpm{font-weight:700;color:var(--fan-accent);font-variant-numeric:tabular-nums}
+
+.net-interface{padding:.6rem 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.net-interface:last-child{border-bottom:none}
+.net-iface-name{font-weight:600;font-size:.85rem;margin-bottom:.35rem;display:flex;align-items:center;gap:.35rem}
+.net-iface-status{font-size:.65rem;padding:1px 6px;border-radius:4px;font-weight:600}
+.net-iface-status.up{background:rgba(76,175,80,.15);color:#4caf50}
+.net-iface-status.down{background:rgba(244,67,54,.15);color:#f44336}
+
+.charts-section{margin-top:.5rem}
+.charts-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(400px,1fr));
+gap:1.25rem
+}
+
+.chart-card{
+background:var(--bg-card);
+border:1px solid var(--border-color);
+border-radius:var(--card-radius);
+padding:1.25rem;
+box-shadow:var(--card-shadow)
+}
+
+.chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem}
+.chart-title{font-size:.95rem;font-weight:600;display:flex;align-items:center;gap:.4rem}
+.chart-badge{font-size:.7rem;color:var(--text-muted);background:rgba(255,255,255,.05);padding:2px 8px;border-radius:10px}
+
+canvas{width:100%;border-radius:8px;background:rgba(0,0,0,.2);display:block}
+
+.toast-container{
+position:fixed;top:5rem;right:2rem;z-index:9999;
+display:flex;flex-direction:column;gap:.5rem
+}
+
+.toast{
+background:rgba(30,30,58,.95);
+border:1px solid var(--border-color);
+color:var(--text-primary);padding:.75rem 1.25rem;
+border-radius:10px;font-size:.85rem;
+box-shadow:0 8px 24px rgba(0,0,0,.4);
+backdrop-filter:blur(12px);
+animation:slideIn .3s ease;max-width:320px;
+display:flex;align-items:center;gap:.5rem
+}
+
+.toast.error{border-left:3px solid #f44336}
+.toast.info{border-left:3px solid var(--cpu-accent)}
+
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
+
+.last-update{font-size:.7rem;color:var(--text-muted);display:flex;align-items:center;gap:.3rem}
+
+@media(max-width:768px){
+header{padding:.75rem 1rem}
+h1{font-size:1.1rem}
+.dashboard{padding:1rem}
+.card-grid{grid-template-columns:1fr}
+.charts-grid{grid-template-columns:1fr}
+.big-value{font-size:2.1rem}
+}
+
+@media(max-width:480px){
+.card{padding:1.15rem}
+.meta-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<header>
+<div class="header-left">
+<span class="logo-icon">&#9729;</span>
+<h1>System Dashboard</h1>
+</div>
+<div class="header-right">
+<span class="last-update" id="lastUpdate">&#9201; Waiting for data...</span>
+<span class="clock" id="clock"></span>
+<span class="status-dot" id="statusDot"></span>
+</div>
+</header>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="dashboard">
+<div class="card-grid" id="cardGrid"></div>
+
+<div class="charts-section">
+<h2 style="font-size:1.15rem;font-weight:700;margin-bottom:1rem;color:var(--text-secondary)">&#128202; Metrics History</h2>
+<div class="charts-grid" id="chartsGrid">
+<div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--cpu-accent)">&#9881; CPU Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="cpuChart" height="200"></canvas></div>
+<div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--mem-accent)">&#128451; Memory Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="memChart" height="200"></canvas></div>
+<div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--gpu-accent)">&#128142; GPU Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="gpuChart" height="200"></canvas></div>
+<div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--net-accent)">&#128275; Network Traffic</span><span class="chart-badge">Bytes/sec</span></div><canvas id="netChart" height="200"></canvas></div>
+</div>
+</div>
+</div>
+
+<script>
+var API_BASE = 'http://localhost:8080';
+var REFRESH_MS = 5000;
+var HISTORY_MS = 30000;
+
+function fmtBytes(b) {
+    if (b == null || b === 0) return '0 B';
+    var abs = Math.abs(b);
+    var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = Math.min(Math.floor(Math.log(abs) / Math.log(1024)), units.length - 1);
+    var val = abs / Math.pow(1024, i);
+    return (i > 0 ? val.toFixed(2) : val.toFixed(0)) + ' ' + units[i];
+}
+
+function fmtRate(bps) {
+    if (bps == null || bps === 0) return '0 B/s';
+    var units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+    var i = Math.min(Math.floor(Math.log(Math.abs(bps)) / Math.log(1024)), units.length - 1);
+    var val = bps / Math.pow(1024, i);
+    return (i > 0 ? val.toFixed(2) : val.toFixed(0)) + ' ' + units[i];
+}
+
+function toast(msg, type) {
+    type = type || 'error';
+    var c = document.getElementById('toastContainer');
+    if (!c) return;
+    var t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.innerHTML = '<span>' + (type === 'error' ? '\u26A0' : '\u24D8') + '</span><span>' + msg + '</span>';
+    c.appendChild(t);
+    setTimeout(function () {
+        t.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(function () { if (t.parentNode) t.remove(); }, 300);
+    }, 4000);
+}
+
+function setConnected(ok) {
+    var d = document.getElementById('statusDot');
+    if (d) d.className = 'status-dot' + (ok ? '' : ' error');
+}
+
+(function updateClock() {
+    document.getElementById('clock').textContent = new Date().toLocaleTimeString();
+    requestAnimationFrame(updateClock);
+})();
+
+function apiGet(path) {
+    return fetch(API_BASE + path).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+    });
+}
+
+/* ── Card helpers ── */
+
+function makeCard(cls) {
+    var d = document.createElement('div');
+    d.className = 'card ' + cls;
+    return d;
+}
+
+function progressHTML(val, label, cls) {
+    var w = Math.min(100, Math.max(0, val || 0));
+    return '<div class="progress-container">' +
+        '<div class="progress-label"><span>' + (label || '') + '</span><span>' + val.toFixed ? val.toFixed(1) + '%' : '--' + '</span></div>' +
+        '<div class="progress-track"><div class="progress-fill" style="width:' + w + '%"></div></div>' +
+        '</div>';
+}
+
+function metaHTML(items) {
+    if (!items.length) return '';
+    var s = '<div class="meta-grid">';
+    for (var k = 0; k < items.length; k++) {
+        s += '<div class="meta-item"><span class="meta-label">' + items[k][0] + '</span><span class="meta-value">' + items[k][1] + '</span></div>';
+    }
+    s += '</div>';
+    return s;
+}
+
+/* ── CPU Card ── */
+
+function buildCpuCard(cpu) {
+    var el = makeCard('cpu');
+    var overall = cpu.percent || 0;
+
+    var barsHTML = '';
+    if (cpu.per_core && cpu.per_core.length) {
+        for (var i = 0; i < cpu.per_core.length; i++) {
+            var c = cpu.per_core[i];
+            var h = Math.max(2, c);
+            var op = 0.3 + (c / 100) * 0.7;
+            barsHTML += '<div class="core-bar-container" title="Core ' + i + ': ' + c.toFixed(1) + '%">' +
+                '<div class="core-bar-track"><div class="core-bar-fill" style="height:' + h + '%;background:rgba(79,195,247,' + op + ')"></div></div>' +
+                '<span style="display:block;font-size:.6rem;color:var(--text-muted);margin-top:2px">' + i + '</span></div>';
+        }
+    }
+
+    var freq = (cpu.freq && cpu.freq.current) ? cpu.freq.current / 1000 : null;
+    var tempStr = (cpu.temperature != null) ? cpu.temperature.toFixed(1) + '\u00b0C' : 'N/A';
+    var cores = cpu.count_physical || '?';
+    var threads = cpu.count_logical || '?';
+
+    el.innerHTML =
+        '<div class="card-header"><div class="card-icon">\u2699</div><span class="card-title">CPU</span></div>' +
+        '<div class="value-row"><span class="big-value" style="color:var(--cpu-accent)">' + overall.toFixed(1) + '</span><span class="unit">%</span></div>' +
+        progressHTML(overall, 'Overall Usage') +
+        (barsHTML ? ('<div class="core-bars">' + barsHTML + '</div>') : '') +
+        metaHTML([
+            ['Frequency', freq ? freq.toFixed(2) + ' GHz' : 'N/A'],
+            ['Temperature', tempStr],
+            ['Topology', cores + 'C / ' + threads + 'T']
+        ]);
+
+    return el;
+}
+
+/* ── Memory Card ── */
+
+function buildMemCard(m) {
+    var el = makeCard('memory');
+    var totalGB = m.total / (1024 ** 3);
+    var usedGB = m.used / (1024 ** 3);
+    var availGB = (m.available != null) ? m.available / (1024 ** 3) : (totalGB - usedGB);
+    var pctUsed = (m.total > 0) ? (m.used / m.total * 100) : 0;
+
+    var html =
+        '<div class="card-header"><div class="card-icon">\u2B50</div><span class="card-title">Memory</span></div>' +
+        '<div class="value-row"><span class="big-value" style="color:var(--mem-accent)">' + pctUsed.toFixed(1) + '</span><span class="unit">%</span></div>' +
+        progressHTML(pctUsed, 'RAM Usage') +
+        metaHTML([
+            ['Total', fmtBytes(m.total)],
+            ['Used', fmtBytes(m.used)],
+            ['Available', fmtBytes(m.available)]
+        ]);
+
+    if (m.swap_total > 0) {
+        var sUsed = m.swap_used / (1024 ** 3);
+        var sTotal = m.swap_total / (1024 ** 3);
+        html += '<div class="swap-section">' +
+            '<div style="font-size:.75rem;color:var(--text-muted);margin-bottom:.4rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em">Swap</div>' +
+            progressHTML(m.swap_percent, 'Swap Usage') +
+            metaHTML([['Total', fmtBytes(m.swap_total)], ['Used', fmtBytes(m.swap_used)]]) +
+        '</div>';
+    }
+
+    el.innerHTML = html;
+    return el;
+}
+
+/* ── GPU Card ── */
+
+function buildGpuCard(g, idx) {
+    var el = makeCard('gpu');
+    var util = (typeof g.utilization === 'number') ? g.utilization : 0;
+
+    var meta = [];
+    meta.push(['Model', g.name || 'Unknown GPU']);
+    if (g.temperature != null && g.temperature !== undefined) meta.push(['Temperature', g.temperature + '\u00b0C']);
+    else meta.push(['Temperature', 'N/A']);
+    if (g.fan_speed != null && g.fan_speed !== undefined) meta.push(['Fan Speed', g.fan_speed + '%']);
+    else meta.push(['Fan Speed', 'N/A']);
+    if (g.power != null && g.power !== undefined) meta.push(['Power', g.power.toFixed(1) + ' W']);
+    else meta.push(['Power', 'N/A']);
+
+    var memPct = (g.memory_percent != null) ? g.memory_percent : ((g.memory_total > 0) ? (g.memory_used / g.memory_total * 100) : null);
+    var memHTML = '';
+    if (memPct != null) {
+        memHTML = '<div style="margin-top:.5rem">' +
+            progressHTML(memPct, 'VRAM ' + fmtBytes(g.memory_used) + '/' + fmtBytes(g.memory_total)) +
+            '</div>';
+    }
+
+    el.innerHTML =
+        '<div class="card-header"><div class="card-icon">\uD83E\uDDA2</div><span class="card-title">GPU' + (idx ? ' ' + idx : '') + '</span></div>' +
+        '<div class="value-row"><span class="big-value" style="color:var(--gpu-accent)">' + util.toFixed(1) + '</span><span class="unit">%</span></div>' +
+        progressHTML(util, 'Utilization') +
+        memHTML +
+        metaHTML(meta);
+
+    return el;
+}
+
+/* ── Network Card ── */
+
+function buildNetCard(nics) {
+    var el = makeCard('network');
+    var html = '<div class="card-header"><div class="card-icon">\u1F6B5</div><span class="card-title">Network</span></div>';
+
+    if (!Array.isArray(nics)) return el;
+
+    for (var j = 0; j < nics.length; j++) {
+        var n = nics[j];
+        var sentRate = n.bytes_sent_per_sec || 0;
+        var recvRate = n.bytes_recv_per_sec || 0;
+
+        html += '<div class="net-interface">' +
+            '<div class="net-iface-name"><span>' + n.name + '</span><span class="net-iface-status up">UP</span></div>' +
+            metaHTML([
+                ['Sent Total', fmtBytes(n.bytes_sent)],
+                ['TX Rate', fmtRate(sentRate)],
+                ['Recv Total', fmtBytes(n.bytes_recv)],
+                ['RX Rate', fmtRate(recvRate)]
+            ]) +
+        '</div>';
+    }
+
+    el.innerHTML = html;
+    return el;
+}
+
+/* ── Fan Speeds Card ── */
+
+function buildFansCard(fans, gpuList) {
+    if (!fans || !fans.length) {
+        var hasGpuFans = false;
+        if (gpuList) {
+            for (var i = 0; i < gpuList.length; i++) {
+                if (gpuList[i].fan_speed != null) { hasGpuFans = true; break; }
+            }
+        }
+        if (!hasGpuFans || !fans) return null;
+    }
+
+    var el = makeCard('fans');
+    var html = '<div class="card-header"><div class="card-icon">\uD83D\uDD25</div><span class="card-title">Fan Speeds</span></div>';
+
+    if (fans && fans.length) {
+        html += '<div style="margin-bottom:.6rem;font-size:.7rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">System Fans</div>';
+        for (var f = 0; f < fans.length; f++) {
+            var fn = fans[f].name || 'Fan ' + f;
+            var rpm = (fans[f].rpm != null) ? fans[f].rpm.toLocaleString() + ' RPM' : 'N/A';
+            html += '<div class="fan-item"><span class="fan-name">' + fn + '</span><span class="fan-rpm">' + rpm + '</span></div>';
+        }
+    }
+
+    if (gpuList) {
+        var gpuFans = [];
+        for (var g = 0; g < gpuList.length; g++) {
+            if (gpuList[g].fan_speed != null && gpuList[g].fan_speed !== undefined) {
+                gpuFans.push({
+                    name: 'GPU ' + (g + 1) + ' Fan',
+                    rpm: gpuList[g].fan_speed + '%'
+                });
+            }
+        }
+        if (gpuFans.length) {
+            html += '<div style="margin-top:.75rem;margin-bottom:.6rem;font-size:.7rem;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:.06em">GPU Fans</div>';
+            for (var gf = 0; gf < gpuFans.length; gf++) {
+                html += '<div class="fan-item"><span class="fan-name">' + gpuFans[gf].name + '</span><span class="fan-rpm">' + gpuFans[gf].rpm + '</span></div>';
+            }
+        }
+    }
+
+    if (!fans || !fans.length) {
+        if (gpuList) {
+            html += '<div style="font-size:.8rem;color:var(--text-muted);padding:.5rem 0">No system fans detected. GPU fan data shown above.</div>';
+        } else {
+            html += '<div style="font-size:.8rem;color:var(--text-muted);padding:.5rem 0">No fan speed data available</div>';
+        }
+    }
+
+    el.innerHTML = html;
+    return el;
+}
+
+/* ── Build all cards from API data ── */
+
+function buildCards(data) {
+    var grid = document.getElementById('cardGrid');
+    if (!grid) return;
+    grid.innerHTML = '';
+
+    if (data.cpu) grid.appendChild(buildCpuCard(data.cpu));
+    if (data.memory) grid.appendChild(buildMemCard(data.memory));
+
+    var gpuList = data.gpus || [];
+    for (var g = 0; g < gpuList.length; g++) {
+        grid.appendChild(buildGpuCard(gpuList[g], g + 1));
+    }
+
+    if (data.network) grid.appendChild(buildNetCard(data.network));
+
+    var fansEl = buildFansCard(data.fans, data.gpus);
+    if (fansEl) grid.appendChild(fansEl);
+}
+
+/* ── Chart drawing ── */
+
+function drawChart(canvasId, datasets, maxVal) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+
+    var ctx = canvas.getContext('2d');
+    var dpr = window.devicePixelRatio || 1;
+    var parent = canvas.parentElement;
+    var w = parent.clientWidth - 40;
+    var h = 200;
+
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    var pad = { t: 16, r: 16, b: 32, l: 55 };
+    var cw = w - pad.l - pad.r;
+    var ch = h - pad.t - pad.b;
+
+    if (maxVal <= 0) maxVal = 100;
+
+    ctx.strokeStyle = 'rgba(255,255,255,.06)';
+    ctx.lineWidth = 1;
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.font = '11px system-ui';
+    ctx.textAlign = 'right';
+
+    var steps = 5;
+    for (var i = 0; i <= steps; i++) {
+        var y = pad.t + ch - (i / steps) * ch;
+        var val = (maxVal * i / steps);
+        ctx.fillText(fmtBytes ? fmtRate ? val.toFixed(maxVal >= 1024 ? 0 : 1) : '--' : '--', pad.l - 8, y + 4);
+        if (i > 0) { ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke(); }
+    }
+
+    ctx.strokeStyle = 'rgba(255,255,255,.03)';
+    for (var v = 1; v <= steps; v++) {
+        var x = pad.l + (v / steps) * cw;
+        ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ch); ctx.stroke();
+    }
+
+    for (var d = 0; d < datasets.length; d++) {
+        var ds = datasets[d];
+        var dataArr = ds.data || [];
+        if (dataArr.length < 2) continue;
+
+        var color = ds.color || 'rgb(79,195,247)';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+
+        var len = dataArr.length;
+        for (var p = 0; p < len; p++) {
+            var px = pad.l + ((p) / Math.max(len - 1, 1)) * cw;
+            var py = pad.t + ch - (((dataArr[p] || 0)) / maxVal) * ch;
+            if (p === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+
+        var grad = ctx.createLinearGradient(0, pad.t, 0, pad.t + ch);
+        grad.addColorStop(0, color.replace(')', ',.15)').replace('rgb', 'rgba'));
+        grad.addColorStop(1, color.replace(')', ',0)').replace('rgb', 'rgba'));
+
+        var lastX = pad.l + ((len - 1) / Math.max(len - 1, 1)) * cw;
+        var firstX = pad.l;
+        ctx.lineTo(lastX, pad.t + ch);
+        ctx.lineTo(firstX, pad.t + ch);
+        ctx.closePath();
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        var lastVal = dataArr[len - 1] || 0;
+        var dotY = pad.t + ch - (lastVal / maxVal) * ch;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(lastX, dotY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+function refreshCharts(history) {
+    if (!history) return;
+
+    var cpuData = history.cpu_percent || [];
+    var memData = history.mem_percent || [];
+
+    // Aggregate GPU data - pick first GPU available
+    var gpuUtilMap = history.gpu_utilization || {};
+    var gpuData = [];
+    for (var key in gpuUtilMap) {
+        if (gpuUtilMap.hasOwnProperty(key)) {
+            gpuData = gpuUtilMap[key].filter(function(v){ return v != null; });
+            break;
+        }
+    }
+
+    var netSent = history.net_bytes_sent || [];
+    var netRecv = history.net_bytes_recv || [];
+
+    drawChart('cpuChart', [{ data: cpuData, color: 'rgb(79,195,247)' }], 100);
+    drawChart('memChart', [{ data: memData, color: 'rgb(129,199,132)' }], 100);
+
+    if (gpuData.length) {
+        drawChart('gpuChart', [{ data: gpuData, color: 'rgb(255,183,77)' }], 100);
+    }
+
+    var allRates = netSent.concat(netRecv).concat([1]);
+    var netMax = Math.max.apply(null, allRates) * 1.2;
+    if (netMax < 1024) netMax = 1024;
+    var netDs = [{ data: netSent, color: 'rgb(229,115,115)' }];
+    if (netRecv.length) netDs.push({ data: netRecv, color: 'rgb(255,82,82)' });
+    drawChart('netChart', netDs, netMax);
+}
+
+/* ── Poll loops ── */
+
+function pollMetrics() {
+    apiGet('/api/metrics').then(function (data) {
+        buildCards(data);
+        setConnected(true);
+        var el = document.getElementById('lastUpdate');
+        if (el) el.innerHTML = '\u23F1 Updated ' + new Date().toLocaleTimeString();
+    }).catch(function (e) {
+        setConnected(false);
+        toast('Failed to fetch metrics: ' + e.message);
+    });
+}
+
+function pollHistory() {
+    apiGet('/api/history').then(refreshCharts).catch(function (e) {
+        toast('Failed to fetch history: ' + e.message);
+    });
+}
+
+pollMetrics();
+pollHistory();
+setInterval(pollMetrics, REFRESH_MS);
+setInterval(pollHistory, HISTORY_MS);
+window.addEventListener('resize', pollHistory);
+</script>
+</body>
+</html>
