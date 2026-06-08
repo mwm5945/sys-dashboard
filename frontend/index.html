@@ -277,14 +277,14 @@ h1{font-size:1.1rem}
 <div class="charts-grid" id="chartsGrid">
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--cpu-accent)">&#9881; CPU Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="cpuChart" height="200"></canvas></div>
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--mem-accent)">&#128451; Memory Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="memChart" height="200"></canvas></div>
-<div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--gpu-accent)">&#128142; GPU Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="gpuChart" height="200"></canvas></div>
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--net-accent)">&#128275; Network Traffic</span><span class="chart-badge">Bytes/sec</span></div><canvas id="netChart" height="200"></canvas></div>
+<div class="chart-card gpu-cards-container"><div id="gpuChartsContainer"></div></div>
 </div>
 </div>
 </div>
 
 <script>
-var API_BASE = 'http://localhost:8080';
+var API_BASE = '';
 var REFRESH_MS = 5000;
 var HISTORY_MS = 30000;
 
@@ -436,29 +436,69 @@ function buildMemCard(m) {
 
 function buildGpuCard(g, idx) {
     var el = makeCard('gpu');
-    var util = (typeof g.utilization === 'number') ? g.utilization : 0;
+    var util = (typeof g.utilization === 'number') ? g.utilization : null;
+    var isIntel = g.vendor && g.vendor === 'Intel';
 
     var meta = [];
     meta.push(['Model', g.name || 'Unknown GPU']);
+    if (isIntel) meta.push(['Type', 'Integrated GPU']);
     if (g.temperature != null && g.temperature !== undefined) meta.push(['Temperature', g.temperature + '\u00b0C']);
     else meta.push(['Temperature', 'N/A']);
     if (g.fan_speed != null && g.fan_speed !== undefined) meta.push(['Fan Speed', g.fan_speed + '%']);
-    else meta.push(['Fan Speed', 'N/A']);
+    else if (!isIntel) meta.push(['Fan Speed', 'N/A']);
     if (g.power != null && g.power !== undefined) meta.push(['Power', g.power.toFixed(1) + ' W']);
-    else meta.push(['Power', 'N/A']);
+    else if (!isIntel) meta.push(['Power', 'N/A']);
 
-    var memPct = (g.memory_percent != null) ? g.memory_percent : ((g.memory_total > 0) ? (g.memory_used / g.memory_total * 100) : null);
+    // Intel-specific: display frequency range
+    if (isIntel) {
+        var curFreq = g.gt_cur_freq_mhz;
+        var minFreq = g.gt_min_freq_mhz;
+        var maxFreq = g.gt_max_freq_mhz;
+        var freqLabel = 'N/A';
+        if (curFreq != null) {
+            if (maxFreq != null) {
+                freqLabel = curFreq + ' / ' + maxFreq + ' MHz';
+            } else if (minFreq != null && maxFreq != null) {
+                freqLabel = curFreq + ' (' + minFreq + '-' + maxFreq + ') MHz';
+            } else {
+                freqLabel = curFreq + ' MHz';
+            }
+        } else if (maxFreq != null) {
+            freqLabel = '-- / ' + maxFreq + ' MHz';
+        }
+        meta.push(['Frequency', freqLabel]);
+
+        // RC6 residency (idle percentage)
+        if (g.rc6_residency != null && g.rc6_residency !== undefined) {
+            meta.push(['RC6 Residency', g.rc6_residency.toFixed(1) + '%']);
+        }
+    }
+
+    var memPct = (g.memory_percent != null) ? g.memory_percent : ((typeof g.memory_total === 'number' && g.memory_total > 0) ? (g.memory_used / g.memory_total * 100) : null);
     var memHTML = '';
     if (memPct != null) {
         memHTML = '<div style="margin-top:.5rem">' +
-            progressHTML(memPct, 'VRAM ' + fmtBytes(g.memory_used) + '/' + fmtBytes(g.memory_total)) +
+            progressHTML(memPct, 'VRAM ' + fmtBytes(g.memory_used || 0) + '/' + fmtBytes(g.memory_total || 0)) +
             '</div>';
     }
 
+    var utilRow = '';
+    if (util != null) {
+        utilRow = '<div class="value-row"><span class="big-value" style="color:var(--gpu-accent)">' + util.toFixed(1) + '</span><span class="unit">%</span></div>' +
+            progressHTML(util, isIntel ? 'GPU Load' : 'Utilization');
+    } else if (g.rc6_residency != null && g.rc6_residency !== undefined && isIntel) {
+        // Derive load from RC6: load ~ 100 - RC6
+        var rc6Load = Math.max(0, roundVal(100 - g.rc6_residency));
+        utilRow = '<div class="value-row"><span class="big-value" style="color:var(--gpu-accent)">' + rc6Load.toFixed(1) + '</span><span class="unit">%</span></div>' +
+            progressHTML(rc6Load, 'GPU Load (from RC6)');
+    } else {
+        utilRow = '<div class="value-row"><span class="big-value" style="color:var(--text-muted)">--</span><span class="unit">%</span></div>' +
+            '<div class="progress-container"><div class="progress-label"><span>Utilization</span><span>N/A</span></div><div class="progress-track"><div class="progress-fill" style="width:0%"></div></div></div>';
+    }
+
     el.innerHTML =
-        '<div class="card-header"><div class="card-icon">\uD83E\uDDA2</div><span class="card-title">GPU' + (idx ? ' ' + idx : '') + '</span></div>' +
-        '<div class="value-row"><span class="big-value" style="color:var(--gpu-accent)">' + util.toFixed(1) + '</span><span class="unit">%</span></div>' +
-        progressHTML(util, 'Utilization') +
+        '<div class="card-header"><div class="card-icon">\uD83E\uDDA2</div><span class="card-title">GPU' + (idx ? ' ' + idx : '') + (isIntel ? ' \u{1F50D}' : '') + '</span></div>' +
+        utilRow +
         memHTML +
         metaHTML(meta);
 
@@ -556,13 +596,13 @@ function buildCards(data) {
     grid.innerHTML = '';
 
     if (data.cpu) grid.appendChild(buildCpuCard(data.cpu));
-    if (data.memory) grid.appendChild(buildMemCard(data.memory));
 
     var gpuList = data.gpus || [];
     for (var g = 0; g < gpuList.length; g++) {
         grid.appendChild(buildGpuCard(gpuList[g], g + 1));
     }
 
+    if (data.memory) grid.appendChild(buildMemCard(data.memory));
     if (data.network) grid.appendChild(buildNetCard(data.network));
 
     var fansEl = buildFansCard(data.fans, data.gpus);
@@ -660,25 +700,11 @@ function refreshCharts(history) {
     var cpuData = history.cpu_percent || [];
     var memData = history.mem_percent || [];
 
-    // Aggregate GPU data - pick first GPU available
-    var gpuUtilMap = history.gpu_utilization || {};
-    var gpuData = [];
-    for (var key in gpuUtilMap) {
-        if (gpuUtilMap.hasOwnProperty(key)) {
-            gpuData = gpuUtilMap[key].filter(function(v){ return v != null; });
-            break;
-        }
-    }
-
     var netSent = history.net_bytes_sent || [];
     var netRecv = history.net_bytes_recv || [];
 
     drawChart('cpuChart', [{ data: cpuData, color: 'rgb(79,195,247)' }], 100);
     drawChart('memChart', [{ data: memData, color: 'rgb(129,199,132)' }], 100);
-
-    if (gpuData.length) {
-        drawChart('gpuChart', [{ data: gpuData, color: 'rgb(255,183,77)' }], 100);
-    }
 
     var allRates = netSent.concat(netRecv).concat([1]);
     var netMax = Math.max.apply(null, allRates) * 1.2;
@@ -686,12 +712,165 @@ function refreshCharts(history) {
     var netDs = [{ data: netSent, color: 'rgb(229,115,115)' }];
     if (netRecv.length) netDs.push({ data: netRecv, color: 'rgb(255,82,82)' });
     drawChart('netChart', netDs, netMax);
+
+    // Per-GPU charts from gpu_history
+    var gpuHist = history.gpu_history || {};
+    renderGpuCharts(gpuHist, gpuNames);
+}
+
+var gpuNames = {};
+
+function updateGpuNames(data) {
+    if (data && data.gpus) {
+        for (var i = 0; i < data.gpus.length; i++) {
+            gpuNames[i] = data.gpus[i].name || ('GPU ' + i);
+        }
+    }
+}
+
+function roundVal(v) { return !(v instanceof Number) || isNaN(v) ? 0 : Math.round(v * 1e6) / 1e6; }
+
+var _gpuChartCache = {};
+
+function renderGpuCharts(gpuHist, names) {
+    gpuNames = names;
+    var container = document.getElementById('gpuChartsContainer');
+    if (!container) return;
+    container.innerHTML = '';
+
+    var colors = [
+        'rgb(255,183,77)',
+        'rgb(255,138,101)',
+        'rgb(163,240,238)',
+        'rgb(221,160,221)',
+        'rgb(144,238,144)',
+    ];
+
+    for (var key in gpuHist) {
+        if (!gpuHist.hasOwnProperty(key)) continue;
+        var h = gpuHist[key];
+        var gpuIdx = parseInt(key);
+        var nameStr = names[gpuIdx] || ('GPU ' + gpuIdx);
+        var cIdx = Math.min(gpuIdx, colors.length - 1);
+
+        // Build per-GPU chart card
+        var wrapper = document.createElement('div');
+        wrapper.style.marginBottom = '1.25rem';
+        var canvasId = 'gpuChart_' + gpuIdx;
+
+        var headerHTML = '<div class="chart-header">' +
+            '<span class="chart-title" style="color:' + colors[cIdx] + '">&#128142; ' + nameStr + '</span>' +
+            '<span class="chart-badge">Last 60s</span></div>';
+        wrapper.innerHTML = headerHTML;
+
+        var canvas = document.createElement('canvas');
+        canvas.id = canvasId;
+        canvas.height = 200;
+        wrapper.appendChild(canvas);
+        container.appendChild(wrapper);
+
+        // Build datasets: utilization (primary), memory (darker), temperature (purple overlay on secondary axis)
+        var utilArr = h.utilization || [];
+        var memArr = h.memory_percent || [];
+        var tempArr = h.temperature || [];
+        var freqCurArr = h.gt_cur_freq_mhz || [];
+        var freqMinArr = h.gt_min_freq_mhz || [];
+        var freqMaxArr = h.gt_max_freq_mhz || [];
+        var rc6Arr = h.rc6_residency || [];
+
+        // Filter out nulls but keep alignment
+        var cleanUtil = utilArr.filter(function(v) { return v != null; });
+        var cleanMem = memArr.filter(function(v) { return v != null; });
+        var cleanTemp = tempArr.filter(function(v) { return v != null; });
+        var cleanFreqCur = freqCurArr.filter(function(v) { return v != null; });
+
+        var ds = [];
+        if (cleanUtil.length > 1) ds.push({ data: cleanUtil, color: colors[cIdx] });
+        if (cleanMem.length > 1) ds.push({ data: cleanMem, color: 'rgb(229,115,115)' });
+        drawChart(canvasId, ds, 100);
+
+        // Temperature as secondary mini-chart below
+        if (cleanTemp.length > 1) {
+            var tempCanvas = document.createElement('canvas');
+            tempCanvas.id = 'gpuTemp_' + gpuIdx;
+            tempCanvas.height = 100;
+            tempCanvas.style.marginTop = '.5rem';
+            wrapper.appendChild(tempCanvas);
+
+            var maxTemp = Math.max.apply(null, cleanTemp) * 1.2;
+            if (maxTemp < 40) maxTemp = 40;
+            drawChart('gpuTemp_' + gpuIdx, [{ data: cleanTemp, color: 'rgb(239,83,80)' }], Math.round(maxTemp));
+        }
+
+        // Intel-specific: GT frequency chart (if we have at least one freq reading)
+        if (cleanFreqCur.length > 1 || (freqMaxArr.length && freqMaxArr[0] != null)) {
+            var freqCanvas = document.createElement('canvas');
+            freqCanvas.id = 'gpuFreq_' + gpuIdx;
+            freqCanvas.height = 120;
+            freqCanvas.style.marginTop = '.5rem';
+            wrapper.appendChild(freqCanvas);
+
+            // Add label for frequency chart
+            var freqLabel = document.createElement('div');
+            freqLabel.style.cssText = 'font-size:.7rem;color:var(--text-muted);margin-top:.4rem;margin-bottom:.2rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em';
+            freqLabel.textContent = 'GT Frequency (MHz)';
+            wrapper.insertBefore(freqLabel, freqCanvas);
+
+            var freqDs = [];
+            if (cleanFreqCur.length > 1) {
+                freqDs.push({ data: cleanFreqCur, color: 'rgb(59,180,230)' });
+            }
+
+            // Also draw min/max frequency boundaries if available
+            var cleanFreqMax = freqMaxArr.filter(function(v) { return v != null; });
+            var cleanFreqMin = freqMinArr.filter(function(v) { return v != null; });
+
+            // Build the max freq as flat line
+            if (cleanFreqMax.length > 0) {
+                var maxVal = cleanFreqMax[0];
+                var maxLine = [];
+                for (var fi = 0; fi < Math.max(cleanFreqCur.length, 1); fi++) {
+                    maxLine.push(maxVal);
+                }
+                if (maxLine.length > 1) freqDs.push({ data: maxLine, color: 'rgba(255,87,34,.4)' });
+            }
+
+            // Set appropriate max for frequency chart
+            var freqMax = 0;
+            if (cleanFreqMax.length > 0) {
+                freqMax = Math.max.apply(null, cleanFreqMax) * 1.1;
+            } else if (cleanFreqCur.length > 0) {
+                freqMax = Math.max.apply(null, cleanFreqCur) * 1.2;
+            }
+            if (freqMax < 400) freqMax = 400;
+
+            drawChart('gpuFreq_' + gpuIdx, freqDs, Math.round(freqMax));
+        }
+
+        // Intel RC6 residency chart (idle percentage - higher means more idle)
+        var cleanRC6 = rc6Arr.filter(function(v) { return v != null; });
+        if (cleanRC6.length > 1) {
+            var rc6Canvas = document.createElement('canvas');
+            rc6Canvas.id = 'gpuRC6_' + gpuIdx;
+            rc6Canvas.height = 100;
+            rc6Canvas.style.marginTop = '.5rem';
+            wrapper.appendChild(rc6Canvas);
+
+            var rc6Label = document.createElement('div');
+            rc6Label.style.cssText = 'font-size:.7rem;color:var(--text-muted);margin-top:.4rem;margin-bottom:.2rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em';
+            rc6Label.textContent = 'RC6 Residency (Idle %)';
+            wrapper.insertBefore(rc6Label, rc6Canvas);
+
+            drawChart('gpuRC6_' + gpuIdx, [{ data: cleanRC6, color: 'rgb(171,71,186)' }], 100);
+        }
+    }
 }
 
 /* ── Poll loops ── */
 
 function pollMetrics() {
     apiGet('/api/metrics').then(function (data) {
+        updateGpuNames(data);
         buildCards(data);
         setConnected(true);
         var el = document.getElementById('lastUpdate');
