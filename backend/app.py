@@ -587,6 +587,52 @@ def _collect_network():
     return active_nics
 
 
+_prev_disk_counters = {}
+
+
+def _collect_disk():
+    global _prev_disk_counters
+    try:
+        disk_io = psutil.disk_io_counters(perdisk=True)
+    except Exception:
+        return []
+
+    now = time.monotonic()
+    rates = []
+
+    if not disk_io:
+        return rates
+
+    for name, counter in disk_io.items():
+        read_bytes = int(counter.read_bytes)
+        write_bytes = int(counter.write_bytes)
+
+        r_rate = 0
+        w_rate = 0
+        prev = _prev_disk_counters.get(name)
+        if prev is not None and isinstance(prev, dict):
+            dt = now - prev["timestamp"]
+            if dt > 0:
+                r_rate = round((read_bytes - prev["read_bytes"]) / dt, 2)
+                w_rate = round((write_bytes - prev["write_bytes"]) / dt, 2)
+
+        _prev_disk_counters[name] = {
+            "timestamp": now,
+            "read_bytes": read_bytes,
+            "write_bytes": write_bytes,
+        }
+
+        rates.append({
+            "name": name,
+            "read_bytes_total": read_bytes,
+            "write_bytes_total": write_bytes,
+            "read_bytes_sec": max(0, r_rate),
+            "write_bytes_sec": max(0, w_rate),
+        })
+
+    return rates
+
+
 def collect_once():
     ts = datetime.now(timezone.utc).isoformat()
 
@@ -621,6 +667,7 @@ def collect_once():
         },
         "gpus": collect_gpu_metrics(),
         "network": _collect_network(),
+        "disk": _collect_disk(),
         "fans": _get_fans(),
     }
 
@@ -667,7 +714,9 @@ def api_history():
             "mem_percent": [],
             "net_bytes_sent": [],
             "net_bytes_recv": [],
-            "gpu_utilization": {},
+            "disk_read_bytes": [],
+            "disk_write_bytes": [],
+            "gpu_history": gpu_series,
         }
 
     timestamps = [s["timestamp"] for s in snapshots]
@@ -675,6 +724,8 @@ def api_history():
     mem_percents = [s["memory"]["percent"] for s in snapshots]
     net_sent = [sum(nic["bytes_sent_per_sec"] for nic in s["network"]) for s in snapshots]
     net_recv = [sum(nic["bytes_recv_per_sec"] for nic in s["network"]) for s in snapshots]
+    disk_read = [sum(d["read_bytes_sec"] for d in s.get("disk", [])) for s in snapshots]
+    disk_write = [sum(d["write_bytes_sec"] for d in s.get("disk", [])) for s in snapshots]
 
     gpu_hist: dict[int, dict] = {}
     for s in snapshots:
@@ -708,5 +759,7 @@ def api_history():
         "mem_percent": mem_percents,
         "net_bytes_sent": net_sent,
         "net_bytes_recv": net_recv,
+        "disk_read_bytes": disk_read,
+        "disk_write_bytes": disk_write,
         "gpu_history": gpu_series,
     }
