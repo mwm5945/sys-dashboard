@@ -255,6 +255,92 @@ h1{font-size:1.1rem}
 .card{padding:1.15rem}
 .meta-grid{grid-template-columns:1fr}
 }
+
+.card.load::before { background: linear-gradient(90deg, #ffb74d, transparent); }
+.card.services::before { background: linear-gradient(90deg, #81c784, transparent); }
+.load-row { display: flex; justify-content: space-around; margin-top: 1rem; text-align: center; }
+.load-item { display: flex; flex-direction: column; }
+.load-val { font-size: 2.5rem; font-weight: 800; color: var(--text-primary); line-height: 1; }
+.load-label { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem; }
+
+.wide-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; margin-bottom: 1.25rem; }
+.storage-container { width: 100%; display: block; padding: 0.5rem 0.5rem; box-sizing: border-box; }
+.storage-item { display: grid; grid-template-columns: 260px minmax(200px, 250px) auto; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); }
+.storage-item-name { color: var(--text-secondary); font-weight: 600; word-break: break-all; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; padding-right: 1rem; box-sizing: border-box; }
+.storage-item-bar-wrap { display: flex; align-items: center; gap: 0.75rem; width: 100%; height: 100%; padding: 0 0.5rem; box-sizing: border-box; }
+.progress-bar-wrap { flex: 1; height: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; position: relative; }
+.progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--mem-accent), rgba(129, 199, 132, 0.6)); transition: width 0.2s ease; }
+.storage-item-size { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; text-align: right; min-width: 90px; padding-left: 0.5rem; box-sizing: border-box; }
+.storage-name { color: var(--text-secondary); font-weight: 600; word-break: break-all; line-height: 1.2; }
+.storage-bar-wrap { width: 200px; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden; flex-shrink: 0; }
+.progress-bar-fill { width: 100%; height: 100%; background: var(--mem-accent); }
+.storage-size { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; min-width: 80px; text-align: right; }
+.proc-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.85rem; }
+.proc-name { font-family: monospace; color: var(--text-secondary); }
+    
+.gpu-fullwidth {
+    grid-column: 1 / -1 !important;
+}
+.gpu-row-container {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 1.5rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+.gp-card {
+    flex: 1 1 350px !important;
+    min-width: 300px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: rgba(22, 22, 44, 0.85) !important;
+    border: 1px solid var(--border-color);
+    border-radius: 14px !important;
+    padding: 1.5rem !important;
+    position: relative !important; /* Context for absolute children if any */
+}
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem !important;
+    font-size: 0.85rem;
+}
+.chart-title { color: var(--text-secondary); }
+.chart-badge { background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); }
+
+.gpu-fullwidth {
+    grid-column: 1 / -1 !important;
+}
+.gpu-row-container {
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: wrap !important;
+    gap: 1.5rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+.gp-card {
+    flex: 1 1 350px !important;
+    min-width: 300px !important;
+    display: flex !important;
+    flex-direction: column !important;
+    background: rgba(22, 22, 44, 0.85) !important;
+    border: 1px solid var(--border-color);
+    border-radius: 14px !important;
+    padding: 1.5rem !important;
+    position: relative !important; /* Context for absolute children if any */
+}
+.chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem !important;
+    font-size: 0.85rem;
+}
+.chart-title { color: var(--text-secondary); }
+.chart-badge { background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; color: var(--text-muted); }
 </style>
 </head>
 <body>
@@ -274,6 +360,25 @@ h1{font-size:1.1rem}
 
 <div class="dashboard">
 <div class="card-grid" id="cardGrid"></div>
+<div class="wide-row">            <div class="card load">
+                <div class="card-header">
+                    <span class="card-icon">⚡</span>
+                    <span class="card-title">Load Average</span>
+                </div>
+                <div id="load-average" class="load-row">
+                    <div class="load-item"><span class="load-val">-</span><span class="load-label">1m</span></div>
+                    <div class="load-item"><span class="load-val">-</span><span class="load-label">5m</span></div>
+                    <div class="load-item"><span class="load-val">-</span><span class="load-label">15m</span></div>
+                </div>
+            </div>
+            <div class="card services">
+                <div class="card-header">
+                    <span class="card-icon">💾</span>
+                    <span class="card-title">Storage & Services</span>
+                </div>
+                <div id="storage-list"></div>
+            </div></div>
+
 
 <div class="charts-section">
 <h2 style="font-size:1.15rem;font-weight:700;margin-bottom:1rem;color:var(--text-secondary)">&#128202; Metrics History</h2>
@@ -281,7 +386,7 @@ h1{font-size:1.1rem}
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--cpu-accent)">&#9881; CPU Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="cpuChart" height="200"></canvas></div>
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--mem-accent)">&#128451; Memory Usage</span><span class="chart-badge">Last 60s</span></div><canvas id="memChart" height="200"></canvas></div>
 <div class="chart-card"><div class="chart-header"><span class="chart-title" style="color:var(--net-accent)">&#128275; Network Traffic</span><span class="chart-badge">Bytes/sec</span></div><canvas id="netChart" height="200"></canvas></div>
-<div class="chart-card gpu-cards-container"><div id="gpuChartsContainer"></div></div>
+<div class="card gpu-fullwidth"><div id="gpuChartsContainer" class="gpu-row-container"></div></div>
 </div>
 </div>
 </div>
@@ -743,6 +848,16 @@ function renderGpuCharts(gpuHist, names) {
     var container = document.getElementById('gpuChartsContainer');
     if (!container) return;
     container.innerHTML = '';
+    container.style.width = '100%'; // Ensure it spans full width
+
+    // Force full width of the parent grid column
+    container.style.display = "block";
+    container.style.width = "100%";
+    
+    // Use flexbox for spacing inside
+    container.style.display = "flex";
+    container.style.flexWrap = "wrap";
+    container.style.gap = "1.25rem";
 
     var colors = [
         'rgb(255,183,77)',
@@ -761,7 +876,7 @@ function renderGpuCharts(gpuHist, names) {
 
         // Build per-GPU chart card
         var wrapper = document.createElement('div');
-        wrapper.style.marginBottom = '1.25rem';
+        wrapper.className = 'gp-card';
         var canvasId = 'gpuChart_' + gpuIdx;
 
         var headerHTML = '<div class="chart-header">' +
@@ -771,7 +886,10 @@ function renderGpuCharts(gpuHist, names) {
 
         var canvas = document.createElement('canvas');
         canvas.id = canvasId;
+        canvas.width = canvas.offsetWidth || 300; // Try to get width from parent
         canvas.height = 200;
+        canvas.style.width = '100%';
+        canvas.style.display = 'block';
         wrapper.appendChild(canvas);
         container.appendChild(wrapper);
 
@@ -878,7 +996,28 @@ function pollMetrics() {
     apiGet('/api/metrics').then(function (data) {
         updateGpuNames(data);
         buildCards(data);
-        setConnected(true);
+    
+        // --- Infrastructure Data ---
+        if (data.load_average) {
+            const lEl = document.getElementById('load-average');
+            if (lEl) lEl.innerHTML = '<div class="load-item"><span class="load-val">' + data.load_average[0] + '</span><span class="load-label">1m</span></div><div class="load-item"><span class="load-val">' + data.load_average[1] + '</span><span class="load-label">5m</span></div><div class="load-item"><span class="load-val">' + data.load_average[2] + '</span><span class="load-label">15m</span></div>';
+        }
+
+        if (data.storages) {
+            const sEl = document.getElementById('storage-list');
+            if (sEl) {
+                sEl.innerHTML = data.storages.map(s => `
+                    <div class="storage-item">
+                        <div class="storage-item-name">${s.mount}</div>
+                        <div class="storage-item-bar-wrap">
+                            <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${s.percent}%"></div></div>
+                            <span class="storage-item-size">${s.used_gb}/${s.total_gb} GB</span>
+                        </div>
+                    </div>`).join('');
+            }
+        }
+    
+    setConnected(true);
         var el = document.getElementById('lastUpdate');
         if (el) el.innerHTML = '\u23F1 Updated ' + new Date().toLocaleTimeString();
     }).catch(function (e) {

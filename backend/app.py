@@ -6,6 +6,7 @@ import json
 import subprocess
 from datetime import datetime, timezone
 from collections import deque
+import os
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -669,6 +670,10 @@ def collect_once():
         "network": _collect_network(),
         "disk": _collect_disk(),
         "fans": _get_fans(),
+        "load_average": _get_load_average(),
+        "storages": _get_storage_capacity(),
+        "top_processes": _get_top_processes(5),
+        "services": _get_service_health(),
     }
 
 
@@ -763,3 +768,64 @@ def api_history():
         "disk_write_bytes": disk_write,
         "gpu_history": gpu_series,
     }
+
+
+def _get_load_average():
+    try:
+        l1, l5, l15 = os.getloadavg()
+        return [round(l1, 2), round(l5, 2), round(l15, 2)]
+    except Exception:
+        return None
+
+def _get_storage_capacity():
+    result = []
+    try:
+        skip_mounts = ('/snap/', '/proc/', '/sys/', '/dev/')
+        for p in psutil.disk_partitions(all=False):
+            # Skip virtual or temporary filesystems
+            if any(p.mountpoint.startswith(skip) for skip in skip_mounts):
+                continue
+            
+            u = psutil.disk_usage(p.mountpoint)
+            result.append({
+                "device": p.device,
+                "mount": p.mountpoint,
+                "total_gb": round(u.total / (1024**3), 1),
+                "used_gb": round(u.used / (1024**3), 1),
+                "percent": u.percent
+            })
+        # Sort by utilization descending
+        result.sort(key=lambda x: x['percent'], reverse=True)
+    except Exception: pass
+    return result
+
+def _get_top_processes(n=5):
+    procs = []
+    try:
+        for proc in psutil.process_iter(['pid', 'name', 'memory_info', 'cpu_percent']):
+            procs.append({
+                "pid": proc.info['pid'],
+                "name": proc.info['name'] or "?",
+                "mem_mb": round(proc.info['memory_info'].rss / 1024 / 1024, 1),
+                "cpu": proc.info['cpu_percent'] or 0
+            })
+        procs.sort(key=lambda x: x['mem_mb'], reverse=True)
+        return procs[:n]
+    except Exception: pass
+    return []
+
+def _get_service_health():
+    result = {}
+    try:
+        out = subprocess.run(["ping", "-c", "1", "8.8.8.8"], capture_output=True, text=True, timeout=2)
+        result["internet"] = out.returncode == 0
+    except Exception: result["internet"] = None
+    try:
+        out = subprocess.run(["docker", "ps", "-q"], capture_output=True, text=True, timeout=2)
+        if out.returncode == 0:
+            count = len(out.stdout.strip().split('\n')) if out.stdout.strip() else 0
+            result["docker"] = {"status": "running", "count": count}
+        else:
+            result["docker"] = {"status": "unavailable"}
+    except Exception: result["docker"] = {"status": "not_installed"}
+    return result
