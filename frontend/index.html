@@ -115,7 +115,9 @@ background:var(--bg-card-hover)
 
 .card.cpu::before{background:linear-gradient(90deg,var(--cpu-accent),transparent)}
 .card.memory::before{background:linear-gradient(90deg,var(--mem-accent),transparent)}
-.card.gpu::before{background:linear-gradient(90deg,var(--gpu-accent),transparent)}
+        .card.gpu-row::before{background:linear-gradient(90deg,var(--gpu-accent),transparent)}
+.gpu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem}
+        .gpu-inner{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.25rem}
 .card.network::before{background:linear-gradient(90deg,var(--net-accent),transparent)}
 .card.fans::before{background:linear-gradient(90deg,var(--fan-accent),transparent)}
 
@@ -635,22 +637,25 @@ function drawChart(canvasId, datasets, maxVal) {
 
     if (maxVal <= 0) maxVal = 100;
 
+    var steps = 5;
     ctx.strokeStyle = 'rgba(255,255,255,.06)';
     ctx.lineWidth = 1;
-    ctx.fillStyle = 'rgba(255,255,255,.35)';
-    ctx.font = '11px system-ui';
-    ctx.textAlign = 'right';
-
-    var steps = 5;
     for (var i = 0; i <= steps; i++) {
         var y = pad.t + ch - (i / steps) * ch;
         var val = (maxVal * i / steps);
-        ctx.fillText(fmtBytes ? fmtRate ? val.toFixed(maxVal >= 1024 ? 0 : 1) : '--' : '--', pad.l - 8, y + 4);
+        var label = '--';
+        if (maxVal <= 100) label = val.toFixed(1);
+        else label = fmtRate(val);
+        ctx.fillStyle = 'rgba(255,255,255,.35)';
+        ctx.font = '11px system-ui';
+        ctx.textAlign = 'right';
+        ctx.fillText(label, pad.l - 8, y + 4);
         if (i > 0) { ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke(); }
     }
 
+    var v;
     ctx.strokeStyle = 'rgba(255,255,255,.03)';
-    for (var v = 1; v <= steps; v++) {
+    for (v = 1; v <= steps; v++) {
         var x = pad.l + (v / steps) * cw;
         ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, pad.t + ch); ctx.stroke();
     }
